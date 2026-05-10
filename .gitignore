@@ -1,0 +1,27 @@
+# Environment
+.venv/
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.python-version
+
+# Config with real paths (example is committed)
+config.toml
+
+# Parquet data files — never commit log data
+*.parquet
+*.parquet.gz
+*.arrow
+
+# Generated outputs
+plots/
+docs/tool_reference.md
+
+# mise
+.mise.local.toml
+
+# OS
+.DS_Store
+Thumbs.db

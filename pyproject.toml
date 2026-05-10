@@ -1,0 +1,37 @@
+[project]
+name = "parquet-tools"
+version = "0.1.0"
+description = "CLI and browser tools for analysing embedded system Parquet logs"
+requires-python = ">=3.12"
+dependencies = [
+    "pyarrow>=15.0",
+    "pandas>=2.2",
+    "numpy>=1.26",
+    "rich>=13.7",
+    "click>=8.1",
+    "plotly>=5.20",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "tomli>=2.0; python_version < '3.11'",   # tomllib built-in 3.11+
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-rich",
+    "cantools>=39.0",    # .dbc file parsing for schema-interactive
+]
+
+# cantools is optional — only needed for schema-interactive with .dbc input
+# Install with: uv sync --extra dev
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: marks tests that require NAS access or large files",
+]

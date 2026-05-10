@@ -1,0 +1,37 @@
+# config.toml — copy this to config.toml and fill in your values
+# config.toml is gitignored; config.toml.example is committed
+
+[data]
+# Path to directory containing parquet log files on NAS or local disk.
+# Can also be overridden per-command with --file or the PARQUET_FILE env var.
+nas_path = "/path/to/nas/logs"
+
+# Optional: glob pattern for auto-discovery of log files within nas_path
+# e.g. "**/*.parquet" or "2024-*/*.parquet"
+file_glob = "**/*.parquet"
+
+[analysis]
+# Default multiplier for d(signal)/dt spike detection.
+# A "sharp change" is flagged when |dsdt| > threshold * mean(|dsdt|) for that signal.
+# Increase to reduce false positives; decrease to catch subtler changes.
+default_threshold = 2.0
+
+# Minimum number of consecutive samples that must sustain a transition
+# before it is reported as a real edge (debounce for whenchanged).
+debounce_samples = 3
+
+[display]
+# Default timestamp format for CLI output: "unix" or "iso"
+# unix = seconds since epoch with decimal (e.g. 1710403267.123)
+# iso  = ISO 8601 UTC string (e.g. 2024-03-14T08:01:07.123Z)
+default_timestamp_format = "unix"
+
+# Number of rows per page in interactive paged views
+page_size = 40
+
+[server]
+# FastAPI dev server settings for the plot tool
+host = "127.0.0.1"
+port = 5050
+# Directory to save standalone HTML plot files
+plot_output_dir = "./plots"

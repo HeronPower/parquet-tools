@@ -1,0 +1,99 @@
+[tools]
+python = "3.12"
+uv = "latest"
+
+[env]
+VIRTUAL_ENV = "{{config_root}}/.venv"
+_.file = ".env"           # auto-loads .env if present (PARQUET_FILE, etc.)
+
+# ─── Setup ────────────────────────────────────────────────────────────────────
+
+[tasks.install]
+description = "Set up Python environment and install all dependencies"
+run = "uv sync --all-extras"
+
+[tasks.mount-check]
+description = "Verify NAS / data path is reachable before running tools"
+run = """
+python3 -c "
+import tomllib, os, sys
+with open('config.toml','rb') as f:
+    cfg = tomllib.load(f)
+path = cfg.get('data',{}).get('nas_path','')
+if not path:
+    print('No nas_path set in config.toml')
+    sys.exit(0)
+if not os.path.exists(path):
+    print(f'ERROR: NAS path not reachable: {path}')
+    sys.exit(1)
+print(f'OK: {path}')
+"
+"""
+
+[tasks.test]
+description = "Run all tests"
+run = "uv run pytest tests/ -v --tb=short"
+
+[tasks.test-fast]
+description = "Run tests excluding slow integration tests"
+run = "uv run pytest tests/ -v --tb=short -m 'not slow'"
+
+[tasks.schema-interactive]
+description = """Interactively build schema.py from a .dbc or Modbus file.
+  Analyses signal names and generates FW naming convention feedback.
+  Usage: mise schema-interactive -- --dbc path/to/signals.dbc
+         mise schema-interactive -- --modbus path/to/registers.csv"""
+run = "uv run python src/schema_interactive.py {{args}}"
+
+# ─── CLI Tools ────────────────────────────────────────────────────────────────
+
+[tasks.listalerts]
+description = """List fault/alert transitions in chronological order.
+  Red = alert SET (0→1), Green = alert CLEAR (1→0).
+  Examples:
+    mise listalerts -- --file data.parquet
+    mise listalerts -- --filter 'mv_.*' --set
+    mise listalerts -- --filter 'overtemp' --clear --iso
+    mise listalerts -- --windowstart 1710403200 --windowend 1710406800"""
+run = "uv run python src/listalerts.py {{args}}"
+
+[tasks.whatchanged]
+description = """Find signals with sharp d(signal)/dt spikes around a timestamp.
+  A spike = |dsdt| > threshold * mean(|dsdt|) for that signal.
+  Examples:
+    mise whatchanged -- --before 1710403267.123
+    mise whatchanged -- --after 2024-03-14T08:00:00Z
+    mise whatchanged -- --before 1710403267 --threshold 3.0 --iso"""
+run = "uv run python src/whatchanged.py {{args}}"
+
+[tasks.whenchanged]
+description = """Find when a signal crossed a value threshold (edge detection).
+  If beforevalue < aftervalue: rising edge search.
+  If beforevalue > aftervalue: falling edge search.
+  Examples:
+    mise whenchanged -- --signal battery_voltage --beforevalue 48.0 --aftervalue 52.0
+    mise whenchanged -- --signal motor_temp --beforevalue 90.0 --aftervalue 80.0 --iso"""
+run = "uv run python src/whenchanged.py {{args}}"
+
+[tasks.plot]
+description = """Launch browser-based interactive plot (FastAPI + plotly).
+  Also saves a standalone HTML file that works offline.
+  Examples:
+    mise plot -- --signal battery_voltage
+    mise plot -- --signals battery_voltage,motor_temp --windowstart 1710403200
+    mise plot -- --alerts --windowstart 1710403200 --windowend 1710406800"""
+run = "uv run python src/plot_server.py {{args}}"
+
+# ─── Docs ─────────────────────────────────────────────────────────────────────
+
+[tasks.docs]
+description = "Generate tool reference docs from --help output"
+run = """
+mkdir -p docs
+for tool in listalerts whatchanged whenchanged plot; do
+  echo "# mise $tool" >> docs/tool_reference.md
+  uv run python src/${tool}.py --help >> docs/tool_reference.md 2>&1
+  echo -e "\n---\n" >> docs/tool_reference.md
+done
+echo "Generated docs/tool_reference.md"
+"""
