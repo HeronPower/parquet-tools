@@ -62,12 +62,11 @@ def render_alert_table(
         title=title,
         box=box.ROUNDED,
         header_style="bold white on grey23",
-        expand=True,
     )
     table.add_column("#", style="dim", width=5, justify="right")
     table.add_column("Timestamp", style="dim", min_width=20)
     table.add_column("Event", min_width=8, justify="center")
-    table.add_column("Signal", style="cyan", min_width=30)
+    table.add_column("Signal", style="cyan", min_width=80, no_wrap=True)
     table.add_column("Before→After", justify="center", min_width=12)
 
     for i, ev in enumerate(events, 1):
@@ -95,11 +94,10 @@ def render_change_table(
         title=title,
         box=box.ROUNDED,
         header_style="bold white on grey23",
-        expand=True,
     )
     table.add_column("#", style="dim", width=5, justify="right")
     table.add_column("Timestamp", style="dim", min_width=20)
-    table.add_column("Signal", style="cyan", min_width=30)
+    table.add_column("Signal", style="cyan", min_width=80, no_wrap=True)
     table.add_column("Before", justify="right", min_width=10)
     table.add_column("After", justify="right", min_width=10)
     table.add_column("Δ", justify="right", min_width=10)
@@ -135,11 +133,10 @@ def render_edge_table(
         title=title,
         box=box.ROUNDED,
         header_style="bold white on grey23",
-        expand=True,
     )
     table.add_column("#", style="dim", width=5, justify="right")
     table.add_column("Timestamp", style="dim", min_width=20)
-    table.add_column("Signal", style="cyan", min_width=30)
+    table.add_column("Signal", style="cyan", min_width=80, no_wrap=True)
     table.add_column("Edge", min_width=10, justify="center")
     table.add_column("Value Before", justify="right", min_width=12)
     table.add_column("Value After", justify="right", min_width=12)

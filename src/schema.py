@@ -151,17 +151,12 @@ def _is_boolean_column(series: pd.Series) -> bool:
 
 def _extract_parent_frame(col_name: str) -> Optional[str]:
     """
-    If column names encode CAN frame hierarchy as a prefix (e.g.
-    "cabinet__dcacCascadedControls_ALERTS__cell_mia"), extract the
-    parent frame portion.
-
-    TODO: adjust the separator to match your actual parquet encoding.
-    Common patterns: "__", ".", "/", ":"
+    Column names encode the hierarchy as device/frame/signal (e.g.
+    "cell1/circuitController_ALERTS_A_alerts/dcac_i_line_oc").
+    Returns the frame portion (second-to-last segment).
     """
-    # TODO: update separator to match your parquet column naming convention
-    separator = "__"
-    if separator in col_name:
-        parts = col_name.split(separator)
+    if "/" in col_name:
+        parts = col_name.split("/")
         if len(parts) >= 2:
             return parts[-2]
     return None
@@ -174,8 +169,8 @@ def _classify_column(col_name: str, series: pd.Series) -> SignalCategory:
     parent_lower = parent.lower() if parent else ""
 
     # Check known lists first (populated by schema-interactive)
-    # Strip potential prefix to get bare signal name for lookup
-    bare = lower.split("__")[-1] if "__" in lower else lower
+    # Strip device/frame prefix to get bare signal name for lookup
+    bare = lower.split("/")[-1] if "/" in lower else lower
     if bare in KNOWN_ALERT_SIGNALS:
         return SignalCategory.ALERT
     if bare in KNOWN_MEASUREMENT_SIGNALS:
@@ -285,7 +280,7 @@ def filter_alert_cols_by_pattern(schema: SchemaInfo, pattern: str) -> list[str]:
     regex = re.compile(pattern, re.IGNORECASE)
     result = []
     for col in schema.alert_cols:
-        bare = col.split("__")[-1] if "__" in col else col
+        bare = col.split("/")[-1] if "/" in col else col
         if regex.search(col) or regex.search(bare):
             result.append(col)
     return result

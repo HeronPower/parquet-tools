@@ -37,8 +37,8 @@ Examples:
   mise whenchanged -- --signal dc_link_voltage --beforevalue 380 --aftervalue 400 \\
     --windowstart 2024-03-14T08:00:00Z --iso
 
-  # Adjust debounce (more tolerant of noise)
-  mise whenchanged -- --signal bus_current --beforevalue -5.0 --aftervalue 5.0 --debounce 1
+  # Suppress noise on a fast-toggling analog signal (require 3 sustained samples)
+  mise whenchanged -- --signal bus_current --beforevalue -5.0 --aftervalue 5.0 --debounce 3
 """,
 )
 @click.option("--file", "file_path", envvar="PARQUET_FILE",
@@ -54,8 +54,11 @@ Examples:
               help="Begin search from this timestamp. Unix seconds or ISO 8601 UTC.")
 @click.option("--windowend", default=None,
               help="End search at this timestamp. Unix seconds or ISO 8601 UTC.")
-@click.option("--debounce", default=3, show_default=True,
-              help="Number of consecutive samples that must sustain the new value to confirm the transition.")
+@click.option("--debounce", default=1, show_default=True,
+              help="Consecutive samples that must sustain the new value. "
+                   "1 = any single-sample crossing counts (no filtering). "
+                   "2 = crossing must hold for 1 additional sample (hides single-sample pulses). "
+                   "Increase to suppress noise in analog signals.")
 @click.option("--iso", is_flag=True, default=False,
               help="Output timestamps as ISO 8601 UTC instead of Unix decimal seconds.")
 @click.option("--no-pager", is_flag=True, default=False,

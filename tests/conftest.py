@@ -68,9 +68,9 @@ def make_demo_df_with_frame_prefix(n_rows: int = 500) -> pd.DataFrame:
     """
     base = make_demo_df(n_rows)
     rename = {
-        "overtemp_dcdc_bot": "cell6__measurement_ALERTS_A_alerts__overtemp_dcdc_bot",
-        "mv_aux_uvlo": "cell6__circuitController_ALERTS_B_alerts__mv_aux_uvlo",
-        "cell_mia": "cabinet__dcacCascadedControls_ALERTS__cell_mia",
+        "overtemp_dcdc_bot": "cell6/measurement_ALERTS_A_alerts/overtemp_dcdc_bot",
+        "mv_aux_uvlo": "cell6/circuitController_ALERTS_B_alerts/mv_aux_uvlo",
+        "cell_mia": "cabinet/dcacCascadedControls_ALERTS/cell_mia",
     }
     return base.rename(columns=rename)
 

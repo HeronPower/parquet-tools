@@ -205,7 +205,7 @@ def find_edge(
     time_col: str,
     before_value: float,
     after_value: float,
-    debounce_samples: int = 3,
+    debounce_samples: int = 1,
     start_time: Optional[float] = None,
 ) -> list[EdgeEvent]:
     """
@@ -219,7 +219,10 @@ def find_edge(
 
     start_time: begin search from this Unix timestamp (inclusive).
     """
-    df_work = df[[time_col, signal_col]].dropna().sort_values(time_col).reset_index(drop=True)
+    df_work = df[[time_col, signal_col]].copy()
+    df_work = df_work[df_work[time_col].notna()]  # must have a timestamp
+    df_work[signal_col] = df_work[signal_col].fillna(before_value)  # NaN = not yet active
+    df_work = df_work.sort_values(time_col).reset_index(drop=True)
 
     if start_time is not None:
         df_work = df_work[df_work[time_col] >= start_time].reset_index(drop=True)
