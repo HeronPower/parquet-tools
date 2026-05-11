@@ -12,51 +12,126 @@ frame name OR the signal name must contain 'fault' or 'alert'.
 import sys
 import click
 from pathlib import Path
-from rich.console import Console
 
-# Allow running from src/ directory directly
+import numpy as np
+import pyarrow.parquet as pq
+
 sys.path.insert(0, str(Path(__file__).parent))
 
-from loader import resolve_parquet_path, load_window, parse_window_args
-from schema import filter_alert_cols_by_pattern
-from timeutils import parse_timestamp, format_timestamp
+from loader import resolve_parquet_path, parse_window_args
+from schema import (
+    analyse_schema, filter_alert_cols_by_pattern,
+    ALERT_KEYWORDS, ALERT_FRAME_KEYWORDS,
+    detect_timestamp_col,
+)
+from timeutils import parse_timestamp, series_to_unix
 from display import render_alert_table, render_summary, paged_print, console
 
 
+def _preselect_columns(path: Path) -> list[str]:
+    """
+    Read only column names from parquet metadata (no data loaded) and return
+    candidates that are likely alert/fault columns plus any timestamp column.
+
+    This avoids loading all 300+ non-alert columns into memory.
+    """
+    arrow_schema = pq.read_schema(path)
+    names = arrow_schema.names
+
+    selected = []
+    for name in names:
+        lower = name.lower()
+        parts = lower.split("/")
+        signal_name = parts[-1]
+        frame_name = parts[-2] if len(parts) >= 2 else ""
+
+        # Timestamp candidates
+        if any(kw in lower for kw in ["timestamp", "time", "datetime", "epoch"]):
+            selected.append(name)
+            continue
+
+        # Frame name contains alert/fault keyword
+        if any(kw.lower() in frame_name for kw in ["alert", "fault"]):
+            selected.append(name)
+            continue
+
+        # Signal name contains alert/fault keyword
+        if any(kw in signal_name for kw in ALERT_KEYWORDS):
+            selected.append(name)
+
+    return selected
+
+
 def _find_transitions(df, alert_cols, ts_col, set_only=False, clear_only=False):
-    """Extract all 0/1 transitions from alert columns, return sorted event list."""
+    """
+    Vectorised transition detection on explicit logged values only.
+
+    NaN rows are skipped entirely — only consecutive non-NaN values are
+    compared. This prevents three classes of false event:
+      - NaN → 1  (logging gap before an active fault)
+      - 1  → NaN (logging gap after an active fault)
+      - NaN → 0  (logging gap before a clear)
+
+    A SET is fired when an explicit logged value changes 0 → 1, or when
+    the very first logged value is 1 (implicit prior state = inactive).
+    A CLR is fired only when an explicit logged value changes 1 → 0.
+    """
     events = []
+
     for col in alert_cols:
-        series = df[col].fillna(0).astype(int)
-        times = df[ts_col]
+        series = df[col]
+        valid = series.notna()
+        explicit_vals = series[valid]
+        explicit_times = df.loc[valid, ts_col]
 
-        prev_val = None
-        for i in range(len(series)):
-            val = series.iloc[i]
-            t = float(times.iloc[i])
+        if explicit_vals.empty:
+            continue
 
-            if prev_val is not None and val != prev_val:
-                if val == 1:   # 0→1 SET
-                    if not clear_only:
-                        events.append({
-                            "timestamp": t,
-                            "signal": col,
-                            "transition": "set",
-                            "value_before": prev_val,
-                            "value_after": val,
-                        })
-                elif val == 0:  # 1→0 CLEAR
-                    if not set_only:
-                        events.append({
-                            "timestamp": t,
-                            "signal": col,
-                            "transition": "clear",
-                            "value_before": prev_val,
-                            "value_after": val,
-                        })
-            prev_val = val
+        prev = explicit_vals.shift(1)   # NaN only for the very first explicit row
+
+        if not clear_only:
+            # 0 → 1, or first logged value is 1 (no prior explicit value = was inactive)
+            set_mask = (explicit_vals == 1) & ((prev == 0) | prev.isna())
+            for t in explicit_times[set_mask].to_numpy(dtype=float):
+                events.append({"timestamp": float(t), "signal": col,
+                               "transition": "set", "value_before": 0, "value_after": 1})
+
+        if not set_only:
+            # 1 → 0 only (explicit zero must be logged)
+            clr_mask = (explicit_vals == 0) & (prev == 1)
+            for t in explicit_times[clr_mask].to_numpy(dtype=float):
+                events.append({"timestamp": float(t), "signal": col,
+                               "transition": "clear", "value_before": 1, "value_after": 0})
 
     return sorted(events, key=lambda e: e["timestamp"])
+
+
+def _load_alert_columns(path: Path, start, end):
+    """
+    Two-pass load:
+      1. Read column names only (metadata) → pre-select alert + timestamp candidates.
+      2. Load only those columns from parquet → run full schema analysis.
+
+    This reduces I/O and memory for wide files (e.g. 383 columns → ~92 loaded).
+    """
+    candidate_cols = _preselect_columns(path)
+
+    pf = pq.ParquetFile(path)
+    table = pf.read(columns=candidate_cols)
+    df = table.to_pandas()
+
+    schema = analyse_schema(df)
+
+    if schema.timestamp_col:
+        df[schema.timestamp_col] = series_to_unix(df[schema.timestamp_col])
+        df = df.sort_values(schema.timestamp_col).reset_index(drop=True)
+
+    if start is not None or end is not None:
+        ts = df[schema.timestamp_col]
+        mask = (ts >= (start or ts.min())) & (ts <= (end or ts.max()))
+        df = df[mask].reset_index(drop=True)
+
+    return df, schema
 
 
 @click.command(
@@ -118,7 +193,7 @@ def listalerts(file_path, filter_regex, only_set, only_clear,
     start, end = parse_window_args(windowstart, windowend)
 
     console.print(f"[dim]Loading[/dim] [cyan]{path}[/cyan] …")
-    df, schema = load_window(path, start=start, end=end)
+    df, schema = _load_alert_columns(path, start, end)
 
     if schema.timestamp_col is None:
         console.print("[red]ERROR:[/red] No timestamp column detected. Check schema.py.")
@@ -130,7 +205,6 @@ def listalerts(file_path, filter_regex, only_set, only_clear,
         console.print("[dim]Check that column names or parent frame names contain 'fault' or 'alert'.[/dim]")
         sys.exit(2)
 
-    # Apply regex filter
     if filter_regex:
         alert_cols = filter_alert_cols_by_pattern(schema, filter_regex)
         if not alert_cols:
