@@ -127,7 +127,6 @@ def whatchanged(file_path, before_ts, after_ts, windowstart, windowend,
     title = f"Sharp Changes — {direction_label} (threshold={threshold}×)"
 
     if no_pager:
-        from display import render_change_table
         console.print(render_change_table(events, iso=iso, title=title))
     else:
         paged_print(
@@ -137,7 +136,6 @@ def whatchanged(file_path, before_ts, after_ts, windowstart, windowend,
             iso=iso,
         )
 
-    from display import render_summary
     render_summary({
         "Signals scanned": len(numeric_cols),
         "Sharp changes": len(events),
